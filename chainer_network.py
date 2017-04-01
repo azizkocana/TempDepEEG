@@ -302,9 +302,10 @@ class Sampler(object):
             label = np.zeros(int(self.num_samples))
             tar = np.random.randint(0, len_label - 1)
 
+            tmp_sin = np.linspace(-np.pi, np.pi, int(self.num_samples / len_label))
             sig[int(self.num_samples * tar / len_label):int(
                 self.num_samples * (tar + 1) / len_label)] += \
-                np.ones(int(self.num_samples / len_label))
+                np.sin(tmp_sin)
 
             label[int(self.num_samples * tar / len_label):int(
                 self.num_samples * (tar + 1) / len_label)] = \
