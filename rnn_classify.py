@@ -10,13 +10,15 @@ import numpy as np
 
 # RNN class with multi layer LSTM
 class MultiLayerLSTM(chainer.ChainList):
-    def __init__(self, n_units=50, n_layers=2, n_inputs=1, n_classes=1, activation=F.elu):
+    def __init__(self, n_units=50, n_layers=2, n_inputs=1, n_classes=1,
+                 activation=F.elu, forget_bias=2):
         super().__init__()
 
         # Arbitrary links
         self.add_link(L.Linear(n_inputs, n_units))
         for i in range(n_layers):
-            self.add_link(L.LSTM(n_units,n_units, forget_bias_init=2))
+            self.add_link(L.LSTM(n_units, n_units,
+                                 forget_bias_init=forget_bias))
 
         self.add_link(L.Linear(n_units, n_classes))
 
@@ -29,7 +31,7 @@ class MultiLayerLSTM(chainer.ChainList):
 
     # Assume only LSTM layers
     def reset_state(self):
-        for i in range(1,self.n_layers+1):
+        for i in range(1, self.n_layers + 1):
             self[i].reset_state()
 
     # Compute output for all time steps
@@ -42,22 +44,24 @@ class MultiLayerLSTM(chainer.ChainList):
         # Compute embedding
         tmp = self.activation(self[0](x))
 
-        for i in range(1, self.n_layers+1):
+        for i in range(1, self.n_layers + 1):
             tmp = self[i](tmp)
 
         # Apply linear layer
         y = self[-1](tmp)
         return y
 
+
 # RNN class with multi layer LSTM
 class MultiLayerNStepLSTM(chainer.Chain):
-    def __init__(self, n_units=50, n_layers=2, n_inputs=1, n_classes=1, activation=F.elu):
+    def __init__(self, n_units=50, n_layers=2, n_inputs=1, n_classes=1,
+                 activation=F.elu):
         super().__init__()
 
         super(MultiLayerNStepLSTM, self).__init__(
-                l_in = L.Linear(n_inputs, n_units),
-                l_lstm = NStepLSTM(n_layers, n_units, n_units, 1.0),
-                l_out =L.Linear(n_units, n_classes)
+            l_in=L.Linear(n_inputs, n_units),
+            l_lstm=NStepLSTM(n_layers, n_units, n_units, 1.0),
+            l_out=L.Linear(n_units, n_classes)
         )
 
         self.activation = activation
@@ -78,36 +82,41 @@ class MultiLayerNStepLSTM(chainer.Chain):
 
     # Compute output given input
     def predict(self, x):
-
         # Compute embedding
         x_hid = [self.activation(self.l_in(xk)) for xk in x]
 
         if self.h is None:
             batch_size = x_hid[0].shape[0]
-            self.h = Variable(self.xp.zeros((self.n_layers, batch_size, self.n_units), dtype=self.xp.float32))
-            self.c = Variable(self.xp.zeros((self.n_layers, batch_size, self.n_units), dtype=self.xp.float32))
+            self.h = Variable(
+                self.xp.zeros((self.n_layers, batch_size, self.n_units),
+                              dtype=self.xp.float32))
+            self.c = Variable(
+                self.xp.zeros((self.n_layers, batch_size, self.n_units),
+                              dtype=self.xp.float32))
 
         # Apply n step lstm
-        self.h, self.c, y_hid  = self.l_lstm(self.h, self.c, x_hid, train=False)
+        self.h, self.c, y_hid = self.l_lstm(self.h, self.c, x_hid, train=False)
 
         # Apply linear layer
         y = [self.l_out(yk) for yk in y_hid]
 
         return y
 
+
 # Mixture density network
 class MixtureDensityNetwork(chainer.Chain):
-    def __init__(self, predictor, n_inputs=1, n_units=10, n_outputs=1, n_mixtures=3, activation=F.sigmoid):
+    def __init__(self, predictor, n_inputs=1, n_units=10, n_outputs=1,
+                 n_mixtures=3, activation=F.sigmoid):
         self.n_units = n_units
         self.n_outputs = n_outputs
         self.n_mixtures = n_mixtures
         self.activation = activation
 
         super(MixtureDensityNetwork, self).__init__(
-            predictor = predictor,
-            coef = L.Linear(n_units, n_mixtures),
-            mean = L.Linear(n_units, n_mixtures*n_outputs),
-            logvar = L.Linear(n_units, n_mixtures)
+            predictor=predictor,
+            coef=L.Linear(n_units, n_mixtures),
+            mean=L.Linear(n_units, n_mixtures * n_outputs),
+            logvar=L.Linear(n_units, n_mixtures)
         )
 
     def __call__(self, x, y):
@@ -116,22 +125,24 @@ class MixtureDensityNetwork(chainer.Chain):
         return neg_log_likelihood
 
     def density(self, y, mean, logvar, coef):
-        mean, y = F.broadcast(mean, F.reshape(y, (-1,1,self.n_outputs)))
+        mean, y = F.broadcast(mean, F.reshape(y, (-1, 1, self.n_outputs)))
         return F.sum(
-            coef*F.exp(-0.5*F.sum((y-mean)**2, axis=2)*F.exp(-logvar))/
-            ((2*np.pi*F.exp(logvar))**(0.5*self.n_outputs)),axis=1)
+            coef * F.exp(
+                -0.5 * F.sum((y - mean) ** 2, axis=2) * F.exp(-logvar)) /
+            ((2 * np.pi * F.exp(logvar)) ** (0.5 * self.n_outputs)), axis=1)
 
     def predict(self, x):
         h = self.activation(self.l1(x))
         coef = F.softmax(self.coef(h))
-        mean = F.reshape(self.mean(h), (-1,self.n_mixtures,self.n_outputs))
+        mean = F.reshape(self.mean(h), (-1, self.n_mixtures, self.n_outputs))
         logvar = self.logvar(h)
         return (mean, logvar, coef)
+
 
 # Classifier class
 class Classifier(chainer.Chain):
     def __init__(self, predictor):
-        super().__init__(predictor = predictor)
+        super().__init__(predictor=predictor)
 
     # Compute loss
     def __call__(self, x, t):
@@ -155,7 +166,6 @@ class Classifier(chainer.Chain):
 
     def reset_state(self):
         self.predictor.reset_state()
-
 
 
 class NStepLSTM(chainer.ChainList):
@@ -182,7 +192,8 @@ class NStepLSTM(chainer.ChainList):
 
     """
 
-    def __init__(self, n_layers, in_size, out_size, dropout, use_cudnn=True, forget_bias_init=1):
+    def __init__(self, n_layers, in_size, out_size, dropout, use_cudnn=True,
+                 forget_bias_init=1):
         weights = []
         for i in range(n_layers):
             weight = link.Link()
@@ -196,7 +207,7 @@ class NStepLSTM(chainer.ChainList):
                 getattr(weight, 'w%d' % j).data[...] = np.random.normal(
                     0, np.sqrt(1. / w_in), (out_size, w_in))
 
-                bias_init = forget_bias_init if j==1 or j==5 else 0
+                bias_init = forget_bias_init if j == 1 or j == 5 else 0
                 getattr(weight, 'b%d' % j).data[...] = bias_init
 
             weights.append(weight)
