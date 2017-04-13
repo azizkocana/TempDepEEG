@@ -12,14 +12,14 @@ import matplotlib.pyplot as plt
 # Specify sampling frequency
 fs = 80
 # Generate Dummy Samples
-num_inter = 10
+num_tar_inter = 10
 max_num_iter = 50
 num_obs = 100
 size_batch = 90
-sig_seconds = 5
+sig_seconds = 8
 offset = 20
 valid_size = 0.1
-var_noise = 0
+var_noise = 0.05
 valid_epoch = 10
 
 # RNN parameters
@@ -32,7 +32,7 @@ size_out = 2
 forget_bias = 2
 grad_clip = 5
 
-samples = Sampler(int(num_obs), fs, sig_seconds, num_inter, offset,
+samples = Sampler(int(num_obs), fs, sig_seconds, num_tar_inter, offset,
                   np.sqrt(var_noise + 0.00001))
 num_samples = samples.num_samples
 
@@ -169,3 +169,4 @@ for j, (x, y, p) in enumerate(zip(x_valid, y_valid, prob_hat.swapaxes(0, 1))):
 
     ax1.set_title('data and probability signals')
     plt.show()
+

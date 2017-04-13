@@ -6,11 +6,38 @@ from chainer.functions.connection import n_step_lstm as rnn
 from chainer import link
 import numpy as np
 
-# Written by F.Quivira
 
+# Multilayer Perceptron Implementation
+class MLP(chainer.ChainList):
+    def __init__(self, n_layers=2, decrease_rate=0.5, n_inputs=10,
+                 n_output=2, activation=F.sigmoid):
+        super().__init__()
+        for i in range(n_layers - 1):
+            self.add_link(L.Linear(int(n_inputs * pow(decrease_rate, i)),
+                                   int(n_inputs * pow(decrease_rate, i + 1))))
+        self.add_link(L.Linear(int(n_inputs * pow(decrease_rate, i + 1)),
+                               n_output))
+
+        self.n_layers = n_layers
+        self.activation = activation
+
+    def __call__(self, x):
+        return [self.predict(xk) for xk in x]
+
+    def predict(self, x):
+
+        tmp = self.activation(self[0](x))
+        for i in range(1, self.n_layers - 1):
+            tmp = self.activation(self[i](tmp))
+        y = self[-1](tmp)
+
+        return y
+
+
+# Written by F.Quivira
 # RNN class with multi layer LSTM
 class MultiLayerLSTM(chainer.ChainList):
-    def __init__(self, n_units=50, n_layers=2, n_inputs=1, n_classes=1,
+    def __init__(self, n_units=50, n_layers=2, n_inputs=1, n_classes=2,
                  activation=F.elu, forget_bias=2):
         super().__init__()
 
@@ -141,8 +168,11 @@ class MixtureDensityNetwork(chainer.Chain):
 
 # Classifier class
 class Classifier(chainer.Chain):
-    def __init__(self, predictor):
+    def __init__(self, predictor, loss_fun=F.softmax_cross_entropy,
+                 class_fun=F.softmax):
         super().__init__(predictor=predictor)
+        self.loss_fun = loss_fun
+        self.class_fun = class_fun
 
     # Compute loss
     def __call__(self, x, t):
@@ -152,9 +182,9 @@ class Classifier(chainer.Chain):
 
         for yk, tk in zip(y, t):
             if loss is not None:
-                loss += F.softmax_cross_entropy(yk, tk)
+                loss += self.loss_fun(yk, tk)
             else:
-                loss = F.softmax_cross_entropy(yk, tk)
+                loss = self.loss_fun(yk, tk)
 
         return loss
 
@@ -162,7 +192,7 @@ class Classifier(chainer.Chain):
     def classify(self, x):
         y = self.predictor(x)
 
-        return [F.softmax(yk) for yk in y]
+        return [self.class_fun(yk) for yk in y]
 
     def reset_state(self):
         self.predictor.reset_state()

@@ -24,7 +24,7 @@
 %
 %  See also crossValidationObject, calculateAuc, kde1d ,scoreThreshold,...
 %%
-function [s_data, s_tar]=M_offlineAnalysis(calibrationEnabled,fileName,fileDirectory)
+function [s_data, s_tar, s_lab]=M_offlineAnalysis(calibrationEnabled,fileName,fileDirectory)
 if(nargin<1)
     calibrationEnabled=1;
 end
@@ -60,7 +60,7 @@ switch filetype
             delete([fileDirectory 'imageList.xls']);
         end
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        disp('Calculating AUC...');
+        %disp('Calculating AUC...');
         initializeOfflineAnalysis
         
         [afterFrontendFilterData,afterFrontendFilterTrigger]=applyFrontendFilter(rawData,triggerSignal,frontendFilteringFlag,frontendFilter);
@@ -91,6 +91,7 @@ switch filetype
                 end
             end
             s_tar{idx} = tmp;
+            s_lab{idx} = trialTargetness((idx-1)*T+1:idx*T);
             
             %             fig=figure();
             %             plot(s_data{idx})
