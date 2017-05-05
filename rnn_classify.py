@@ -9,8 +9,18 @@ import numpy as np
 
 # Multilayer Perceptron Implementation
 class MLP(chainer.ChainList):
+    """ Multi Layer Perceptron implementation"""
+
     def __init__(self, n_layers=2, decrease_rate=0.5, n_inputs=10,
                  n_output=2, activation=F.sigmoid):
+        """ Initialization
+             Args:
+                n_layers(int): number of layers
+                decrease_rate(float): size_layer_(i)/size_layer_(i+1) ratio
+                n_inputs(int): input size
+                n_output(int): output size
+                activation(chainerF): activation function in MLP """
+
         super().__init__()
         for i in range(n_layers - 1):
             self.add_link(L.Linear(int(n_inputs * pow(decrease_rate, i)),
@@ -22,10 +32,11 @@ class MLP(chainer.ChainList):
         self.activation = activation
 
     def __call__(self, x):
+        """ Feed forward elements one by one """
         return [self.predict(xk) for xk in x]
 
     def predict(self, x):
-
+        """ Feed forward neural network """
         tmp = self.activation(self[0](x))
         for i in range(1, self.n_layers - 1):
             tmp = self.activation(self[i](tmp))
@@ -176,6 +187,7 @@ class Classifier(chainer.Chain):
 
     # Compute loss
     def __call__(self, x, t):
+
         y = self.predictor(x)
 
         loss = None
