@@ -24,7 +24,7 @@
 %
 %  See also crossValidationObject, calculateAuc, kde1d ,scoreThreshold,...
 %%
-function [s_data, s_tar, s_lab]=M_offlineAnalysis(calibrationEnabled,fileName,fileDirectory)
+function [s_data, s_tar, s_lab, s_time, s_let_lab,fileName, fileDirectory,meanAuc,stdAuc]=M_offlineAnalysis(calibrationEnabled,fileName,fileDirectory)
 if(nargin<1)
     calibrationEnabled=1;
 end
@@ -90,8 +90,10 @@ switch filetype
                     tmp(tmp_2+1:tmp_2+256*0.5) =  ones(1, 256*0.5);
                 end
             end
+            s_time{idx} = trialSampleTimeIndices((idx-1)*T+1:idx*T)-trialSampleTimeIndices((idx-1)*T+1);
             s_tar{idx} = tmp;
             s_lab{idx} = trialTargetness((idx-1)*T+1:idx*T);
+            s_let_lab{idx} = trialLabels((idx-1)*T+1:idx*T);
             
             %             fig=figure();
             %             plot(s_data{idx})
@@ -108,60 +110,60 @@ switch filetype
         clear afterFrontendFilterData
         
         
-%         %% Artifact Removal
-%         
-%         
-%         if RSVPKeyboardParams.artifactFiltering.enabled==1
-%             artifactFilteringParameters
-%             dataInBuffer=[];
-%             artifactFilteringParametersCalculation;
-%             
-%             [rejectedTrials,availableChannels] = artifactRemoval(dataInBuffer,...
-%                 trialData,...
-%                 fs,...
-%                 artifactFilteringParams,...
-%                 calibrationArtifactParameters,...
-%                 RSVPKeyboardParams.artifactFiltering);
-%             
-%             trialData(:,:,rejectedTrials==1)=[];
-%             trialTargetness(rejectedTrials==1)=[];
-%             trialRejectionProbability=length(find(rejectedTrials==1))/length(rejectedTrials);
-%             
-%         else
-%             calibrationArtifactParameters=[];
-%             trialRejectionProbability=0;
-%         end
-%         
-%         
-%         %%
-%         %load ae_out2
-%         tempTrialData=UnsupervisedProcessFlow.learn(trialData,trialTargetness)
-%         %tempTrialData=ae_out
-%         
-%         switch RSVPKeyboardParams.SupervisedProccesses.optimizationMode
-%             % Defult values for parameters
-%             case 0
-%                 optimizedParameterValues=	(RSVPKeyboardParams.SupervisedProccesses);
-%                 % Using fmeansearch to find optimum parameters
-%             case 1
-%                 [prametersInitialValues xString]=functionToOptimize(RSVPKeyboardParams.SupervisedProccesses);
-%                 [optimizedParameterValues ~]=fminsearch(@(x) functionToOptimize(RSVPKeyboardParams.SupervisedProccesses,eval(xString),crossValidationObject,tempTrialData,trialTargetness),prametersInitialValues);
-%                 
-%                 % Using grid search to find the prameters
-%             case 2
-%                 [optimizedParameterValues,~] = gridSearch(RSVPKeyboardParams.SupervisedProccesses,crossValidationObject,tempTrialData,trialTargetness);
-%                 
-%         end
-%         
-%         display(optimizedParameterValues)
-%         finalSupervisedProcessStruct=functionToOptimize(RSVPKeyboardParams.SupervisedProccesses,optimizedParameterValues);
-%         featureExtractionProcessFlow=formProcessFlow( finalSupervisedProcessStruct );
-%         
-%         scores=crossValidationObject.apply(featureExtractionProcessFlow,tempTrialData,trialTargetness);
-%         [meanAuc,stdAuc]=calculateAuc(scores,trialTargetness,crossValidationObject.crossValidationPartitioning,crossValidationObject.K);
-%         
-%         
-%         %%
+        %% Artifact Removal
+        
+        
+        if RSVPKeyboardParams.artifactFiltering.enabled==1
+            artifactFilteringParameters
+            dataInBuffer=[];
+            artifactFilteringParametersCalculation;
+            
+            [rejectedTrials,availableChannels] = artifactRemoval(dataInBuffer,...
+                trialData,...
+                fs,...
+                artifactFilteringParams,...
+                calibrationArtifactParameters,...
+                RSVPKeyboardParams.artifactFiltering);
+            
+            trialData(:,:,rejectedTrials==1)=[];
+            trialTargetness(rejectedTrials==1)=[];
+            trialRejectionProbability=length(find(rejectedTrials==1))/length(rejectedTrials);
+            
+        else
+            calibrationArtifactParameters=[];
+            trialRejectionProbability=0;
+        end
+        
+        
+        %%
+        %load ae_out2
+        tempTrialData=UnsupervisedProcessFlow.learn(trialData,trialTargetness)
+        %tempTrialData=ae_out
+        
+        switch RSVPKeyboardParams.SupervisedProccesses.optimizationMode
+            % Defult values for parameters
+            case 0
+                optimizedParameterValues=	(RSVPKeyboardParams.SupervisedProccesses);
+                % Using fmeansearch to find optimum parameters
+            case 1
+                [prametersInitialValues xString]=functionToOptimize(RSVPKeyboardParams.SupervisedProccesses);
+                [optimizedParameterValues ~]=fminsearch(@(x) functionToOptimize(RSVPKeyboardParams.SupervisedProccesses,eval(xString),crossValidationObject,tempTrialData,trialTargetness),prametersInitialValues);
+                
+                % Using grid search to find the prameters
+            case 2
+                [optimizedParameterValues,~] = gridSearch(RSVPKeyboardParams.SupervisedProccesses,crossValidationObject,tempTrialData,trialTargetness);
+                
+        end
+        
+        display(optimizedParameterValues)
+        finalSupervisedProcessStruct=functionToOptimize(RSVPKeyboardParams.SupervisedProccesses,optimizedParameterValues);
+        featureExtractionProcessFlow=formProcessFlow( finalSupervisedProcessStruct );
+        
+        scores=crossValidationObject.apply(featureExtractionProcessFlow,tempTrialData,trialTargetness);
+        [meanAuc,stdAuc]=calculateAuc(scores,trialTargetness,crossValidationObject.crossValidationPartitioning,crossValidationObject.K);
+        
+        
+        %%
 %         disp(['AUC calculation is completed. AUC is '  num2str(meanAuc) '.']);
 %         
 %         
@@ -173,7 +175,7 @@ switch filetype
 %         scoreStruct.probThresholdNontarget=scoreThreshold(nontargetScores,scoreStruct.conditionalpdf4nontargetKDE.kernelWidth,0.99);
 %         scoreStruct.AUC=meanAuc;
 %         scoreStruct.trialRejectionProbability=trialRejectionProbability;
-%         
+        
 %         if(calibrationEnabled)
 %             featureExtractionProcessFlow.learn(trialData,trialTargetness);
 %             calibrationDataStruct.trialData = trialData;
@@ -189,7 +191,7 @@ switch filetype
 %         else
 %             featureExtractionProcessFlow=[];
 %         end
-%         
+        
 end
 end
 
