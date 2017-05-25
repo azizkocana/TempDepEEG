@@ -6,6 +6,7 @@ import numpy as np
 from chainer import Variable, optimizers
 from chainer import functions as F
 import random
+import pickle
 
 
 class TrainRNN(object):
@@ -16,7 +17,7 @@ class TrainRNN(object):
 
     def __init__(self, raw_samples, raw_labels, ratio_batch=0.3, test_size=0.1,
                  valid_size=0.1, size_out=2, size_state=50, num_layer=3,
-                 bptt=20, max_num_iter=300, valid_epoch=2):
+                 bptt=20, max_num_iter=300, valid_epoch=2, print_name='dummy'):
         """ Args:
             raw_samples(ndarray[#_samples x time_samples x channels]): float32
             raw_labels(ndarray[#_samples x time_samples]): int32
@@ -29,6 +30,7 @@ class TrainRNN(object):
             bptt(int): skip bptt samples then update parameters
             max_num_iter(int): maximum number of iterations
             valid_epoch(int): wait valid_epoch iterations then validate
+            print_name(string): name of the model
         """
         self.samples = [raw_samples[i] for i in range(raw_samples.shape[0])]
         self.labels = [raw_labels[i] for i in range(raw_labels.shape[0])]
@@ -49,122 +51,168 @@ class TrainRNN(object):
         self.size_inp = self.samples[0].shape[1]  # Size of the input layer
         self.num_samples = self.samples[0].shape[0]
 
+        indices = np.arange(len(self.samples))
+
         # Split data
-        self.train_samples, self.test_samples, self.train_labels, self.test_labels = train_test_split(
-            self.samples, self.labels, stratify=self.labels,
+        self.train_samples, self.test_samples, self.train_labels, \
+        self.test_labels, self.train_idx, self.test_idx = train_test_split(
+            self.samples, self.labels, indices, stratify=self.labels,
             test_size=self.test_size)
 
         # Helper variables
         self.train_loss = []
         self.valid_loss = []
         self.test_loss = []
+        self.print_name = print_name
 
-    def train(self):
+    def train(self,k):
+        """ Trains the recurrent Neural Network
+            Args:
+                k(int): number of cross validations """
+
         # Split data
-        x_train, x_valid, y_train, y_valid = \
-            train_test_split(self.train_samples, self.train_labels,
-                             stratify=self.train_labels,
-                             test_size=self.valid_size)
+        indices_ts = list(np.arange(len(self.train_samples)))
+        x_train, x_valid, y_train, y_valid, = train_test_split(
+            self.train_samples, self.train_labels,
+            stratify=self.train_labels,
+            test_size=self.valid_size)
 
-        x_train = np.asarray(x_train)
-        x_train = x_train.reshape(x_train.shape[0], x_train.shape[1],
-                                  self.size_inp)
-        x_train = x_train.astype(np.float32)
-        y_train = np.asarray(y_train)
-        y_train = y_train.astype(np.int32)
-        size_batch = int(len(x_train) * self.ratio_batch)
+        dat_train = x_train + x_valid
+        lab_train = y_train + y_valid
 
-        x_valid = np.asarray(x_valid)
-        x_valid = x_valid.reshape(x_valid.shape[0], x_valid.shape[1],
-                                  self.size_inp)
-        x_valid = x_valid.astype(np.float32)
-        y_valid = np.asarray(y_valid)
-        y_valid = y_valid.astype(np.int32)
+        min_val_e_models, min_val_errors = [], []
+        for cv_idx in range(k):
 
-        # Start Training Network
-        # Define model and optimizer
-        model = Classifier(
-            MultiLayerLSTM(n_units=self.size_state, n_layers=self.num_layer,
-                           n_classes=self.size_out, n_inputs=self.size_inp,
-                           forget_bias=self.forget_bias))
+            # Reset the train loss
+            self.train_loss = []
+            print('cross validation: {}'.format(cv_idx))
 
-        optimizer = optimizers.Adam()
-        optimizer.setup(model)
-        optimizer.add_hook(chainer.optimizer.GradientClipping(self.grad_clip))
+            val_indices = indices_ts[
+                          int(cv_idx * len(indices_ts) * self.valid_size)
+                          :int((cv_idx + 1) * len(
+                              indices_ts) * self.valid_size - 1)]
+            train_indices = list(set(indices_ts) - set(val_indices))
 
-        epoch = 0
-        models = []
+            x_train = [dat_train[i] for i in train_indices]
+            y_train = [lab_train[i] for i in train_indices]
+            x_valid = [dat_train[i] for i in val_indices]
+            y_valid = [lab_train[i] for i in val_indices]
 
-        time_per_epoch = 0
+            x_train = np.asarray(x_train)
+            x_train = x_train.reshape(x_train.shape[0], x_train.shape[1],
+                                      self.size_inp)
+            x_train = x_train.astype(np.float32)
+            y_train = np.asarray(y_train)
+            y_train = y_train.astype(np.int32)
+            size_batch = int(len(x_train) * self.ratio_batch)
 
-        # For all epochs.
-        indices = [i for i in range(len(x_train))]
-        for i in range(self.max_num_iter):
+            x_valid = np.asarray(x_valid)
+            x_valid = x_valid.reshape(x_valid.shape[0], x_valid.shape[1],
+                                      self.size_inp)
+            x_valid = x_valid.astype(np.float32)
+            y_valid = np.asarray(y_valid)
+            y_valid = y_valid.astype(np.int32)
 
-            t0 = time.time()
-            model.reset_state()
-            random.shuffle(indices)
-            x_train = np.asarray([x_train[i] for i in indices])
-            y_train = np.asarray([y_train[i] for i in indices])
+            # Start Training Network
+            # Define model and optimizer
+            model = Classifier(
+                MultiLayerLSTM(n_units=self.size_state,
+                               n_layers=self.num_layer,
+                               n_classes=self.size_out, n_inputs=self.size_inp,
+                               forget_bias=self.forget_bias))
 
-            # For all mini_batches
-            loss_data = 0
-            for b_idx in range(int(len(x_train) / size_batch)):
-                # Accumulate loss for each data point until right before end
-                x_b_train = x_train[
-                            b_idx * size_batch: (b_idx + 1) * size_batch, :, :]
-                y_b_train = y_train[
-                            b_idx * size_batch: (b_idx + 1) * size_batch, :]
+            optimizer = optimizers.Adam()
+            optimizer.setup(model)
+            optimizer.add_hook(
+                chainer.optimizer.GradientClipping(self.grad_clip))
 
-                for k in range(0, self.num_samples, self.back_prop_length):
-                    # Get batches
-                    trial_length = min(self.back_prop_length,
-                                       self.num_samples - k)
-                    x = [Variable(x_b_train[:, k + n]) for n in
-                         range(trial_length)]
-                    y = [Variable(y_b_train[:, k + n]) for n in
-                         range(trial_length)]
+            epoch = 0
+            models = []
 
-                    loss = model(x, y) / trial_length
+            time_per_epoch = 0
 
-                    model.cleargrads()
-                    loss.backward()
-                    loss.unchain_backward()
-                    optimizer.update()
+            # For all epochs.
+            indices = [i for i in range(len(x_train))]
+            valid_loss = []
+            for i in range(self.max_num_iter):
 
-                    loss_data += loss.data
+                t0 = time.time()
+                model.reset_state()
+                random.shuffle(indices)
+                x_train = np.asarray([x_train[i] for i in indices])
+                y_train = np.asarray([y_train[i] for i in indices])
 
-            loss_data /= ((b_idx + 1) * (k / self.back_prop_length))
+                # For all mini_batches
+                loss_data = 0
+                for b_idx in range(int(len(x_train) / size_batch)):
+                    # Accumulate loss for each data point until right before end
+                    x_b_train = x_train[
+                                b_idx * size_batch: (b_idx + 1) * size_batch,
+                                :, :]
+                    y_b_train = y_train[
+                                b_idx * size_batch: (b_idx + 1) * size_batch,
+                                :]
 
-            epoch += 1
-            print('epoch {}, error {}'.format(epoch, loss_data))
-            self.train_loss.append(loss_data)
+                    for k in range(0, self.num_samples, self.back_prop_length):
+                        # Get batches
+                        trial_length = min(self.back_prop_length,
+                                           self.num_samples - k)
+                        x = [Variable(x_b_train[:, k + n]) for n in
+                             range(trial_length)]
+                        y = [Variable(y_b_train[:, k + n]) for n in
+                             range(trial_length)]
 
-            t1 = time.time()
-            time_per_epoch += t1 - t0
+                        loss = model(x, y) / trial_length
 
-            # In validation step, copy model and
-            # evaluate loss without computational graph
-            if (i + 1) % self.valid_epoch == 0:
-                models.append(model.copy())
-                models[-1].reset_state()
+                        model.cleargrads()
+                        loss.backward()
+                        loss.unchain_backward()
+                        optimizer.update()
 
-                with chainer.no_backprop_mode():
-                    # Get batches
-                    x = [Variable(x_valid[:, n]) for n in
-                         range(self.num_samples)]
-                    y = [Variable(y_valid[:, n]) for n in
-                         range(self.num_samples)]
+                        loss_data += loss.data
 
-                    loss = models[-1](x, y) / self.num_samples
-                    self.valid_loss.append(loss.data)
+                loss_data /= ((b_idx + 1) * (k / self.back_prop_length))
 
-        time_per_epoch /= self.max_num_iter
-        print('total time per epoch = {} seconds'.format(time_per_epoch))
+                epoch += 1
+                print('epoch {}, error {}'.format(epoch, loss_data))
+                self.train_loss.append(loss_data)
 
-        # Get best model from validation
-        self.min_val_e_model = models[np.argmin(self.valid_loss)]
+                t1 = time.time()
+                time_per_epoch += t1 - t0
+
+                # In validation step, copy model and
+                # evaluate loss without computational graph
+                if (i + 1) % self.valid_epoch == 0:
+                    models.append(model.copy())
+                    models[-1].reset_state()
+
+                    with chainer.no_backprop_mode():
+                        # Get batches
+                        x = [Variable(x_valid[:, n]) for n in
+                             range(self.num_samples)]
+                        y = [Variable(y_valid[:, n]) for n in
+                             range(self.num_samples)]
+
+                        loss = models[-1](x, y) / self.num_samples
+                        valid_loss.append(loss.data)
+
+            time_per_epoch /= self.max_num_iter
+            self.valid_loss.append(valid_loss)
+            print('total time per epoch = {} seconds'.format(time_per_epoch))
+
+            # Get best model from validation
+            self.min_val_e_model = models[np.argmin(valid_loss)]
+            self.min_val_e_model.reset_state()
+
+            # Keep Validation Loss and the minimum error model
+            min_val_e_models.append(self.min_val_e_model)
+            min_val_errors.append(np.min(valid_loss))
+
+        self.min_val_e_model = min_val_e_models[np.argmin(min_val_errors)]
         self.min_val_e_model.reset_state()
+
+        pickle.dump(self.min_val_e_model,
+                    open("models" + str(self.print_name) + ".p", "wb"))
 
     def test(self):
 
@@ -187,6 +235,13 @@ class TrainRNN(object):
 
 
 class TrainMLP(object):
+    """ Trains a Multi Layer Perceptron
+        Functions:
+            train: Trains the multi layer perceptron using training set and
+                picks the model with least validation error
+            test: Tests the least validation error model using the test data
+             """
+
     def __init__(self, raw_samples, raw_labels, ratio_batch=0.3, test_size=0.1,
                  valid_size=0.1, num_layer=3, max_num_iter=300, valid_epoch=2):
         """ Args:
