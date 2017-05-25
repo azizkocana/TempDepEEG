@@ -23,7 +23,7 @@ import winsound
 
 """ Data should be three dimensional ar ray
     data: [num_samples x length of time signal x number of channels]
-    label: [num_samples x 1 x length of time signal]"""
+    label: [num_samples x 1 x length of time signal] """
 
 folder_dat = \
     '.\dat\modified_CSL_RSVPKeyboard_di830609_IRB130107_ERPCalibration_2016-07-22-T-16-48'
@@ -104,39 +104,39 @@ for j, (x, y, p) in enumerate(
     x = RNN.test_samples[j]
     y = RNN.test_labels[j]
 
-    fig = plt.figure()
-    ax1 = fig.add_subplot(211)
-
-    ax2 = ax1.twinx()
-    ax1.plot(x, linewidth=2)
-    ax2.plot(p[:, -1], '.-', label='estimate', linewidth=2)
-    ax2.plot(y, '--', label='true', linewidth=2)
-
-    ax1.set_xlim(0, RNN.num_samples - 1)
-    ax1.set_ylim(-30, 30)
-    ax1.set_xlabel('samples', fontsize=18)
-    ax1.set_ylabel('data [uV]', fontsize=18)
-
-    ax2.set_ylim(0, 1)
-    ax2.set_ylabel('probability', fontsize=18)
-    ax2.legend(loc='upper right', shadow=True, fontsize=15)
-
-    ax1.grid(True)
-
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['left'].set_visible(False)
-    ax2.get_xaxis().tick_bottom()
-    ax2.get_yaxis().tick_right()
-
-    ax1.spines['top'].set_visible(False)
-    ax1.spines['right'].set_visible(False)
-    ax1.get_xaxis().tick_bottom()
-    ax1.get_yaxis().tick_left()
-
-    plt.savefig('.\FigRNN' + print_name + '\S' + str(count) + 'DSFig.eps',
-                format='eps', bbox_inches='tight', pad_inches=0.0, dpi=1200)
-    plt.savefig('.\FigRNN' + print_name + '\S' + str(count) + 'DSFig.jpg',
-                format='jpg', bbox_inches='tight', pad_inches=0.0, dpi=1200)
+    # fig = plt.figure()
+    # ax1 = fig.add_subplot(211)
+    #
+    # ax2 = ax1.twinx()
+    # ax1.plot(x, linewidth=2)
+    # ax2.plot(p[:, -1], '.-', label='estimate', linewidth=2)
+    # ax2.plot(y, '--', label='true', linewidth=2)
+    #
+    # ax1.set_xlim(0, RNN.num_samples - 1)
+    # ax1.set_ylim(-30, 30)
+    # ax1.set_xlabel('samples', fontsize=18)
+    # ax1.set_ylabel('data [uV]', fontsize=18)
+    #
+    # ax2.set_ylim(0, 1)
+    # ax2.set_ylabel('probability', fontsize=18)
+    # ax2.legend(loc='upper right', shadow=True, fontsize=15)
+    #
+    # ax1.grid(True)
+    #
+    # ax2.spines['top'].set_visible(False)
+    # ax2.spines['left'].set_visible(False)
+    # ax2.get_xaxis().tick_bottom()
+    # ax2.get_yaxis().tick_right()
+    #
+    # ax1.spines['top'].set_visible(False)
+    # ax1.spines['right'].set_visible(False)
+    # ax1.get_xaxis().tick_bottom()
+    # ax1.get_yaxis().tick_left()
+    #
+    # plt.savefig('.\FigRNN' + print_name + '\S' + str(count) + 'DSFig.eps',
+    #             format='eps', bbox_inches='tight', pad_inches=0.0, dpi=1200)
+    # plt.savefig('.\FigRNN' + print_name + '\S' + str(count) + 'DSFig.jpg',
+    #             format='jpg', bbox_inches='tight', pad_inches=0.0, dpi=1200)
 
     p = np.power(p, 1 / p.shape[0])
     p.astype(np.float64)

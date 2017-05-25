@@ -11,19 +11,22 @@ close all
 %RSVPKeyboardParameters;
 %offlineAnalysis;
 
-load sample_trial
+% Load your sample trial data in matrix form from RSVP
+load sample_3b12b_S2
 ch = [5,6,7,8];
 
 % Parameters
-N = 500;  % number of samples to be generated
+N = 300;  % number of samples to be generated
 size_a = 4;  % number of AR coefficients
 T = 10;  % number of trials in sequence
+var_gam = 0.4*128;  % variance of the gamma distribution for shifting erp start points
+var_gau = 0.1;  % variance of gaussian distribution for scaling erp magnitude
 
 len_trial = size(trialData,1);
 len_overlap = floor(len_trial/2);  % overlap size
-len_sig = (T-1) * len_overlap + len_trial + len_overlap/2;
+len_sig = (T-1) * len_overlap + len_trial + len_overlap*4;
 trialData = 10^6*trialData;
-mag_s = 0.2;  % variance of the random noise
+mag_s = 0.3;  % variance of the random noise
 
 % Generate target filter
 target = mean(trialData(:,ch,trialTargetness==1),3);
@@ -39,11 +42,12 @@ a = a/size(non_target,3);
 
 for idx = 1:N
     
-    t = randi(T-1) * len_overlap;
+    t = (randi(T-1) * len_overlap);
     s = mag_s * randn(4,len_sig);
     
     s = upfirdn(s.',a.').';
-    s(:,t:t+len_trial-1) = s(:,t:t+len_trial-1)+target.';
+    rand_shift = floor(gamrnd(1,var_gam));
+    s(:,rand_shift+t:rand_shift+t+len_trial-1) = s(:,rand_shift+t:rand_shift+t+len_trial-1)+ (1+var_gau*randn(1))*target.';
     
     l = zeros(1,length(s));
     l(1,t:t+len_trial-1)  = ones(1,len_trial);
@@ -53,7 +57,7 @@ for idx = 1:N
 end
 
 for idx = 1:length(data)
-    data_m(idx,:,:) = data{idx};
+    data_m(idx,:,:) = data{idx}.';
     label_m(idx,:,:) = label{idx};
 end
 
