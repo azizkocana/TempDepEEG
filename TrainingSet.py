@@ -1,5 +1,5 @@
 import chainer
-from rnn_classify import MultiLayerLSTM, Classifier, MLP
+from neuralnet_models import MultiLayerLSTM, Classifier, MLP, GenAdvNet
 from sklearn.model_selection import train_test_split
 import time
 import numpy as np
@@ -65,7 +65,7 @@ class TrainRNN(object):
         self.test_loss = []
         self.print_name = print_name
 
-    def train(self,k):
+    def train(self, k):
         """ Trains the recurrent Neural Network
             Args:
                 k(int): number of cross validations """
@@ -253,7 +253,6 @@ class TrainMLP(object):
             size_out(int): output size for RNN
             size_state(int): state size for LSTM
             num_layer(int): number of LSTM layers
-            bptt(int): skip bptt samples then update parameters
             max_num_iter(int): maximum number of iterations
             valid_epoch(int): wait valid_epoch iterations then validate
         """
@@ -590,3 +589,140 @@ class TrainOneStepRNN(object):
                 y_hat[-1][idx_test].data == np.max(y_hat[-1][idx_test].data)))
 
         self.acc = tmp[0] / y_hat[0].shape[0]
+
+
+class TrainGAN(object):
+    """ Trains Generative Adversarial Network """
+
+    def __init__(self, raw_samples, mean_gen, cov_gen, num_class=1,
+                 size_batch=0.3, test_size=0.1, valid_size=0.1, num_layer=3,
+                 max_num_iter=300, valid_epoch=2):
+        """ Args:
+            raw_samples(ndarray[#_samples x time_samples x channels]): float32
+            size_batch(float): batch size = #_samples * ratio_batch
+            test_size(float): Train-Test Split ratio for sample set
+            valid_size(float): Validation-Train Split ratio for Train set
+            mean_gen(nd.array): mean of the generator variable
+            cov_gen(nd.array): covariance of the generator variable
+            num_class(int): number of classes generated using z
+
+        """
+
+        self.samples = raw_samples
+
+        # Parameters
+        self.num_layer = num_layer  # Number of layers in MLP
+        self.size_batch = size_batch  # Batch size
+        self.valid_size = valid_size  # Validation percentage in training\
+
+        self.size_y = num_class + 1  # Number of classes
+        self.size_x = self.samples[0].shape[0]  # Size of the input layer
+        self.size_z = mean_gen.shape[0]  # Generator random variable size
+        self.mean_z = mean_gen
+        self.cov_z = cov_gen
+
+        self.dec_gen = np.power((self.size_x / self.size_z),
+                                1 / num_layer)
+        self.dec_dis = np.power((self.size_y / self.size_x),
+                                1 / num_layer)
+
+        self.grad_clip = 5  # Gradient clipping
+        self.max_num_iter = max_num_iter  # Maximum number of epochs
+        self.valid_epoch = valid_epoch  # Perform validation after # of epochs
+        self.test_size = test_size
+
+        self.num_samples = self.samples[0].shape[0]
+
+        # Helper variables
+        self.train_loss = []
+        self.valid_loss = []
+        self.test_loss = []
+
+        self.discriminator = MLP(n_layers=self.num_layer,
+                                 decrease_rate=self.dec_dis,
+                                 n_inputs=self.size_x,
+                                 n_output=self.size_y,
+                                 activation=F.sigmoid)
+        self.generator = MLP(n_layers=self.num_layer,
+                             decrease_rate=self.dec_gen, n_inputs=self.size_z,
+                             n_output=self.size_x, activation=F.sigmoid)
+
+    def train(self, train_disc):
+
+        chainer.initializers.Identity()
+
+        # Have two different optimizers
+        opt_g = optimizers.Adam()
+        opt_d = optimizers.Adam()
+        opt_g.setup(self.generator)
+        opt_d.setup(self.discriminator)
+        opt_g.add_hook(chainer.optimizer.GradientClipping(self.grad_clip))
+        opt_d.add_hook(chainer.optimizer.GradientClipping(self.grad_clip))
+
+        # For all epochs.
+        for i in range(self.max_num_iter):
+
+            random.shuffle(self.samples, random.random)
+
+            acc_loss_d = 0
+            for k in range(train_disc):
+                for b_idx in range(int(len(self.samples) / self.size_batch)):
+                    # Sample from the random distribution
+                    z = np.random.multivariate_normal(self.mean_z, self.cov_z,
+                                                      self.size_batch)
+                    z = [z[c] for c in range(z.shape[0])]
+                    z = np.asarray(z)
+                    z = z.astype(np.float32)
+                    z = [Variable(z)]
+
+                    # Generate fake samples
+                    gz = self.generator(z)
+
+                    # Sample from the data set
+                    x = self.samples[
+                        b_idx * self.size_batch:(b_idx + 1) * self.size_batch]
+                    x = np.asarray(x)
+                    x = x.astype(np.float32)
+                    x = [Variable(x)]
+
+                    c = np.concatenate(np.array([gz[0].data, x[0].data]),
+                                       axis=0)
+                    c = c.astype(np.float32)
+                    c = [Variable(c)]
+
+                    tmp = Variable(
+                        np.array(
+                            [1 for i in range(x[0].shape[0])] +
+                            [0 for i in range(gz[0].shape[0])]).astype(
+                            np.int32))
+                    loss_d = F.softmax_cross_entropy(self.discriminator(c)[0],
+                                                     tmp)
+
+                    self.discriminator.cleargrads()
+                    loss_d.backward()
+                    opt_d.update()
+
+                    acc_loss_d += loss_d.data
+
+            acc_loss_d /= train_disc * len(
+                self.samples) / self.size_batch
+
+            z = np.random.multivariate_normal(self.mean_z, self.cov_z,
+                                              self.size_batch)
+            z = [z[c] for c in range(z.shape[0])]
+            z = np.asarray(z)
+            z = z.astype(np.float32)
+            z = [Variable(z)]
+
+            dz = self.discriminator(self.generator(z))
+            tmp = Variable(
+                np.array([1 for i in range(dz[0].shape[0])]).astype(
+                    np.int32))
+            loss_g = F.softmax_cross_entropy(dz[0], tmp)
+
+            self.generator.cleargrads()
+            loss_g.backward()
+            opt_g.update()
+
+            print('G:{}, D:{} - Epoch:{}'.format(loss_g.data, acc_loss_d,
+                                                 i))

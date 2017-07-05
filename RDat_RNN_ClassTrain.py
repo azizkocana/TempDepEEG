@@ -23,16 +23,12 @@ import winsound
 
 """ Data should be three dimensional ar ray
     data: [num_samples x length of time signal x number of channels]
-    label: [num_samples x 1 x length of time signal] """
+    label: [num_samples x 1 x length of time signal]"""
 
-# folder_dat = \
-#    '.\dat\modified_CSL_RSVPKeyboard_di830609_IRB130107_ERPCalibration_2016
-# -07-22-T-16-48'
-folder_dat = '.\dat\concatenated_eu'
-
+folder_dat = \
+    '.\dat\modified_CSL_RSVPKeyboard_di830609_IRB130107_ERPCalibration_2016-07-22-T-16-48'
 # If \a kinda happens in print name add M for model in front
-# print_name = '\di830609_IRB130107_2016-07-22-T-16-48_v2'
-print_name = '\concatenated_eu_v0'
+print_name = '\di830609_IRB130107_2016-07-22-T-16-48_v2'
 
 # As we are using reshape form Matrix dimensions should be as this
 samples_o = sio.loadmat(folder_dat + '\data.mat')
@@ -54,9 +50,9 @@ num_layer = 4  # Number of LSTM layers (depth)
 size_layer = 35
 size_out = 2
 max_num_iter = 120
-test_size = .50
+test_size = .1
 
-RNN = TrainRNN(raw_samples, raw_labels, ratio_batch=0.2, test_size=test_size,
+RNN = TrainRNN(raw_samples, raw_labels, ratio_batch=0.3, test_size=test_size,
                valid_size=0.1, size_out=size_out, size_state=size_layer,
                num_layer=num_layer, bptt=20, max_num_iter=max_num_iter,
                valid_epoch=2, print_name=print_name)
@@ -102,7 +98,7 @@ with chainer.no_backprop_mode():
 
 count = 1
 P = []
-
+plt.style.use('grayscale')
 for j, (x, y, p) in enumerate(
         zip(RNN.test_samples, RNN.test_labels, prob_hat.swapaxes(0, 1))):
     x = RNN.test_samples[j]
@@ -114,11 +110,11 @@ for j, (x, y, p) in enumerate(
     ax1 = fig.add_subplot(211)
 
     ax2 = ax1.twinx()
-    ax1.plot(tmp, x, linewidth=2, color='black')
+    ax1.plot(tmp, x, linewidth=2)
     ax2.plot(tmp, p[:, -1], '.-', label='estimate', linewidth=2)
     ax2.plot(tmp, y, '--', label='true', linewidth=2)
 
-    ax1.set_xlim(0, RNN.num_samples / 256)
+    ax1.set_xlim(0, (RNN.num_samples) / 256)
     ax1.set_ylim(-30, 30)
     ax1.set_xlabel('time [s]', fontsize=18)
     ax1.set_ylabel('data [uV]', fontsize=18)

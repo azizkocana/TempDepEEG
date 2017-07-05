@@ -7,29 +7,40 @@ from chainer import link
 import numpy as np
 
 
-# TODO: Conditional Variational Autoencoder implementation
-# Conditional Variational Autoencoder Implementation
-# class CondVAE(chainer.ChainList):
-#     """ Conditional Variational Autoencoder Implementation """
-#
-#     def __init__(self, n_layers=2, decrease_rate_enc=0.5, n_inputs_enc=10,
-#                  n_output=2, activation=F.sigmoid):
-#         """ Initialization
-#              Args:
-#                 n_layers(int): number of layers
-#                 decrease_rate(float): size_layer_(i)/size_layer_(i+1) ratio
-#                 n_inputs(int): input size
-#                 n_output(int): output size
-#                 activation(chainerF): activation function in MLP """
-#
-#         super().__init__()
-#         for i in range(n_layers - 1):
-#             self.add_link(
-#                 L.Linear(int(n_inputs_enc * pow(decrease_rate_enc, i)),
-#                          int(n_inputs_enc * pow(decrease_rate_enc, i + 1))))
-#         self.add_link(
-#             L.Linear(int(n_inputs_enc * pow(decrease_rate_enc, i + 1)),
-#                      n_output))
+# TODO: Write GAN code / Currently not working!
+class GenAdvNet(chainer.Chain):
+    """ Generative Adversarial Net implementation.
+        This implementation basically have two MLP neural networks fighting
+        each other to win the game.
+        Attr:
+            generator(MLP): generative network duplicates data
+            discriminator(MLP): discriminative network classifies if the
+            data comes from the actual data or from generator """
+
+    def __init__(self, n_layers_gen=2, dec_r_gen=2, activation=F.sigmoid,
+                 s_z=10, s_x=100, s_y=2, n_layers_dis=2,
+                 dec_r_dis=0.5):
+        """ Initialization """
+        self.generator = MLP(n_layers=n_layers_gen, decrease_rate=dec_r_gen,
+                             n_inputs=s_z, n_output=s_x, activation=activation)
+        self.discriminator = MLP(n_layers=n_layers_dis,
+                                 decrease_rate=dec_r_dis,
+                                 n_inputs=s_x, n_output=s_y,
+                                 activation=activation)
+
+    def __call__(self, z):
+        x = self.generator(z)
+        y = [self.discriminator(x)[0]]
+
+        return x, y
+
+    def generate(self, z):
+        x = self.generator(z)
+        return x
+
+    def discriminate(self, x):
+        y = [self.discriminator(x)[0]]
+        return y
 
 
 # Multilayer Perceptron Implementation
